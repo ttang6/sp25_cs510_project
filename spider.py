@@ -10,7 +10,7 @@ from datetime import datetime
 # Configuration
 SAVE_PATH = './RawJSON'
 START_URL = 'https://grainger.illinois.edu/'
-MAX_PAGES = 10
+MAX_PAGES = 10000
 MAX_C = 10  # Maximum concurrent requests
 
 # Create save directory
