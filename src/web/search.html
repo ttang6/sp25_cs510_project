@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Document Retrieval System</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css">
+    <style>
+        .search-container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .search-title {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .search-box {
+            margin-bottom: 20px;
+        }
+        .search-options {
+            margin-bottom: 20px;
+        }
+        .search-history {
+            margin-top: 40px;
+        }
+        .history-item {
+            cursor: pointer;
+            padding: 5px;
+            border-bottom: 1px solid #eee;
+        }
+        .history-item:hover {
+            background-color: #f8f9fa;
+        }
+        .autocomplete-items {
+            position: absolute;
+            border: 1px solid #ddd;
+            border-top: none;
+            z-index: 99;
+            width: 100%;
+            background-color: white;
+        }
+        .autocomplete-items div {
+            padding: 10px;
+            cursor: pointer;
+        }
+        .autocomplete-items div:hover {
+            background-color: #e9e9e9;
+        }
+        .autocomplete-active {
+            background-color: #e9e9e9 !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="search-container">
+            <div class="search-title">
+                <h1>Web Document Retrieval System</h1>
+                <p class="text-muted">Search and discover web documents</p>
+            </div>
+
+            {% if message %}
+            <div class="alert alert-warning">{{ message }}</div>
+            {% endif %}
+
+            <form action="/search" method="post" class="search-box" id="searchForm">
+                <div class="input-group mb-3">
+                    <input type="text" class="form-control" id="searchInput" name="q" placeholder="Enter your search query..." autocomplete="off">
+                    <button class="btn btn-primary" type="submit">Search</button>
+                </div>
+                <div id="autocompleteList" class="autocomplete-items"></div>
+                
+                <div class="search-options">
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="type" id="standardSearch" value="standard" checked>
+                        <label class="form-check-label" for="standardSearch">Standard Search</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="type" id="phraseSearch" value="phrase">
+                        <label class="form-check-label" for="phraseSearch">Phrase Search</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="type" id="wildcardSearch" value="wildcard">
+                        <label class="form-check-label" for="wildcardSearch">Wildcard Search</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="type" id="documentSearch" value="document">
+                        <label class="form-check-label" for="documentSearch">Document Search</label>
+                    </div>
+                </div>
+            </form>
+
+            <div class="search-history">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h3>Recent Searches</h3>
+                    <div>
+                        <a href="/history" class="btn btn-outline-secondary btn-sm">View All History</a>
+                        <button id="clearHistoryBtn" class="btn btn-outline-danger btn-sm ms-2">Clear History</button>
+                    </div>
+                </div>
+                <div id="recentSearches">
+                    <div class="d-flex justify-content-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            if (!localStorage.getItem('searchHistory')) {
+                localStorage.setItem('searchHistory', JSON.stringify([]));
+            }
+            
+            displayRecentSearches();
+            
+            document.getElementById('searchForm').addEventListener('submit', function(event) {
+                const query = document.getElementById('searchInput').value.trim();
+                if (query) {
+                    const typeInputs = document.querySelectorAll('input[name="type"]');
+                    let selectedType = 'standard';
+                    
+                    for (const input of typeInputs) {
+                        if (input.checked) {
+                            selectedType = input.value;
+                            break;
+                        }
+                    }
+                    
+                    saveSearchToHistory(query, selectedType);
+                }
+            });
+            
+            document.getElementById('clearHistoryBtn').addEventListener('click', function() {
+                if (confirm('Are you sure you want to clear your search history?')) {
+                    localStorage.setItem('searchHistory', JSON.stringify([]));
+                    displayRecentSearches();
+                }
+            });
+            
+            const searchInput = document.getElementById("searchInput");
+            const autocompleteList = document.getElementById("autocompleteList");
+            let currentFocus = -1;
+
+            searchInput.addEventListener("input", function(e) {
+                const val = this.value;
+                closeAllLists();
+                if (!val) { return false; }
+
+                fetch('/autocomplete?q=' + val)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.length > 0) {
+                            autocompleteList.innerHTML = '';
+                            data.forEach(item => {
+                                const div = document.createElement("DIV");
+                                div.innerHTML = item;
+                                div.addEventListener("click", function(e) {
+                                    searchInput.value = this.innerHTML;
+                                    closeAllLists();
+                                });
+                                autocompleteList.appendChild(div);
+                            });
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error fetching autocomplete suggestions:', error);
+                    });
+            });
+
+            searchInput.addEventListener("keydown", function(e) {
+                const x = autocompleteList.getElementsByTagName("div");
+                if (e.keyCode == 40) {
+                    currentFocus++;
+                    addActive(x);
+                } else if (e.keyCode == 38) {
+                    currentFocus--;
+                    addActive(x);
+                } else if (e.keyCode == 13) {
+                    if (currentFocus > -1) {
+                        e.preventDefault();
+                        if (x) x[currentFocus].click();
+                    }
+                }
+            });
+
+            function addActive(x) {
+                if (!x) return false;
+                removeActive(x);
+                if (currentFocus >= x.length) currentFocus = 0;
+                if (currentFocus < 0) currentFocus = (x.length - 1);
+                x[currentFocus].classList.add("autocomplete-active");
+            }
+
+            function removeActive(x) {
+                for (let i = 0; i < x.length; i++) {
+                    x[i].classList.remove("autocomplete-active");
+                }
+            }
+
+            function closeAllLists() {
+                autocompleteList.innerHTML = '';
+            }
+
+            document.addEventListener("click", function (e) {
+                closeAllLists();
+            });
+            
+            function saveSearchToHistory(query, type) {
+                let history = JSON.parse(localStorage.getItem('searchHistory')) || [];
+                
+                const now = new Date();
+                const timestamp = now.toLocaleString();
+                
+                const entry = {
+                    query: query,
+                    type: type,
+                    timestamp: timestamp
+                };
+                
+                history = history.filter(item => !(item.query === query && item.type === type));
+                
+                history.unshift(entry);
+                
+                if (history.length > 100) {
+                    history = history.slice(0, 100);
+                }
+                
+                localStorage.setItem('searchHistory', JSON.stringify(history));
+            }
+            
+            function displayRecentSearches() {
+                const recentSearchesElement = document.getElementById('recentSearches');
+                const history = JSON.parse(localStorage.getItem('searchHistory')) || [];
+                
+                let html = '';
+                if (history.length === 0) {
+                    html = '<p class="text-muted">No recent searches</p>';
+                } else {
+                    const recentHistory = history.slice(0, 10);
+                    
+                    html = '<div class="list-group">';
+                    recentHistory.forEach(item => {
+                        html += `<div class="history-item list-group-item list-group-item-action" 
+                                data-query="${item.query}" data-type="${item.type}">
+                                <div class="d-flex w-100 justify-content-between">
+                                <h5 class="mb-1">${item.query}</h5>
+                                <small>${item.timestamp}</small>
+                                </div>
+                                <small>Search type: ${item.type}</small>
+                                </div>`;
+                    });
+                    html += '</div>';
+                }
+                
+                recentSearchesElement.innerHTML = html;
+                
+                document.querySelectorAll('.history-item').forEach(item => {
+                    item.addEventListener('click', function() {
+                        const query = this.getAttribute('data-query');
+                        const type = this.getAttribute('data-type');
+                        
+                        document.getElementById('searchInput').value = query;
+                        document.querySelector(`input[name="type"][value="${type}"]`).checked = true;
+                        document.querySelector('form.search-box').submit();
+                    });
+                });
+            }
+        });
+    </script>
+</body>
+</html>

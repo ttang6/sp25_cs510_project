@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Search History</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css">
+    <style>
+        .page-header {
+            padding: 20px 0;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #eee;
+        }
+        .history-table {
+            margin-top: 20px;
+        }
+        .clickable-row {
+            cursor: pointer;
+        }
+        .clickable-row:hover {
+            background-color: #f5f5f5;
+        }
+        .no-history {
+            margin-top: 50px;
+            text-align: center;
+        }
+        .action-buttons {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="page-header">
+            <div class="row">
+                <div class="col-md-6">
+                    <h1>Search History</h1>
+                    <p class="text-muted">Your search history is stored locally in your browser</p>
+                </div>
+                <div class="col-md-6 text-end">
+                    <a href="/" class="btn btn-primary">Back to Search</a>
+                    <button id="clearHistoryBtn" class="btn btn-danger ms-2">Clear All History</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="history-content">
+            <div id="historyTable" class="history-table">
+                <div class="d-flex justify-content-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const historyTableElement = document.getElementById('historyTable');
+            
+            function loadSearchHistory() {
+                const history = JSON.parse(localStorage.getItem('searchHistory')) || [];
+                
+                if (history.length === 0) {
+                    historyTableElement.innerHTML = `
+                        <div class="no-history">
+                            <div class="alert alert-info">
+                                <h4>No search history found</h4>
+                                <p>Your search history will appear here once you start searching.</p>
+                            </div>
+                            <div class="action-buttons">
+                                <a href="/" class="btn btn-primary">Start Searching</a>
+                            </div>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                let tableHtml = `
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Query</th>
+                                <th>Search Type</th>
+                                <th>Date and Time</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+                
+                history.forEach((item, index) => {
+                    tableHtml += `
+                        <tr class="clickable-row" data-query="${item.query}" data-type="${item.type}">
+                            <td>${item.query}</td>
+                            <td>${item.type}</td>
+                            <td>${item.timestamp}</td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-danger delete-entry" data-index="${index}">
+                                    Delete
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+                
+                tableHtml += `
+                        </tbody>
+                    </table>
+                    <div class="alert alert-info">
+                        Click on any row to repeat the search query
+                    </div>
+                `;
+                
+                historyTableElement.innerHTML = tableHtml;
+                
+                document.querySelectorAll('.clickable-row').forEach(row => {
+                    row.addEventListener('click', function(e) {
+                        if (e.target.classList.contains('delete-entry') || 
+                            e.target.closest('.delete-entry')) {
+                            return;
+                        }
+                        
+                        const query = this.getAttribute('data-query');
+                        const type = this.getAttribute('data-type');
+                        
+                        const form = document.createElement('form');
+                        form.method = 'post';
+                        form.action = '/search';
+                        
+                        const queryInput = document.createElement('input');
+                        queryInput.type = 'hidden';
+                        queryInput.name = 'q';
+                        queryInput.value = query;
+                        form.appendChild(queryInput);
+                        
+                        const typeInput = document.createElement('input');
+                        typeInput.type = 'hidden';
+                        typeInput.name = 'type';
+                        typeInput.value = type;
+                        form.appendChild(typeInput);
+                        
+                        document.body.appendChild(form);
+                        form.submit();
+                    });
+                });
+                
+                document.querySelectorAll('.delete-entry').forEach(button => {
+                    button.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        
+                        const index = parseInt(this.getAttribute('data-index'));
+                        deleteHistoryEntry(index);
+                    });
+                });
+            }
+            
+            function deleteHistoryEntry(index) {
+                let history = JSON.parse(localStorage.getItem('searchHistory')) || [];
+                
+                if (index >= 0 && index < history.length) {
+                    const entryToDelete = history[index];
+                    
+                    if (confirm(`Are you sure you want to delete the search "${entryToDelete.query}"?`)) {
+                        history.splice(index, 1);
+                        localStorage.setItem('searchHistory', JSON.stringify(history));
+                        loadSearchHistory();
+                    }
+                }
+            }
+            
+            document.getElementById('clearHistoryBtn').addEventListener('click', function() {
+                if (confirm('Are you sure you want to clear your entire search history?')) {
+                    localStorage.setItem('searchHistory', JSON.stringify([]));
+                    loadSearchHistory();
+                }
+            });
+            
+            loadSearchHistory();
+        });
+    </script>
+</body>
+</html>
