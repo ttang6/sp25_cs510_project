@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Search History | UIUC Grainger Search</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css">
+    <style>
+        :root {
+            --illini-orange: #E84A27;
+            --illini-blue: #13294B;
+            --light-gray: #f8f9fa;
+            --medium-gray: #e9ecef;
+        }
+        
+        body {
+            font-family: 'Source Sans Pro', 'Open Sans', Arial, sans-serif;
+            background-color: #f8f9fa;
+            color: #333;
+        }
+        
+        .navbar {
+            background-color: var(--illini-blue);
+            padding: 0.5rem 1rem;
+        }
+        
+        .navbar-brand {
+            font-weight: bold;
+            color: white !important;
+        }
+        
+        .navbar-brand span {
+            color: var(--illini-orange);
+        }
+        
+        .page-header {
+            background-color: white;
+            padding: 1.5rem 0;
+            margin-bottom: 2rem;
+            border-bottom: 1px solid #eee;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        }
+        
+        .page-header h1 {
+            color: var(--illini-blue);
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+        
+        .page-header p {
+            color: #666;
+            margin-bottom: 0;
+        }
+        
+        .history-content {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        
+        .history-table {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            overflow: hidden;
+        }
+        
+        .history-table .table {
+            margin-bottom: 0;
+        }
+        
+        .history-table thead {
+            background-color: var(--illini-blue);
+            color: white;
+        }
+        
+        .history-table th {
+            font-weight: 600;
+            padding: 1rem;
+            border: none;
+        }
+        
+        .clickable-row {
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .clickable-row:hover {
+            background-color: var(--light-gray);
+        }
+        
+        .clickable-row td {
+            padding: 1rem;
+            vertical-align: middle;
+        }
+        
+        .clickable-row td:first-child {
+            font-weight: 600;
+            color: var(--illini-blue);
+        }
+        
+        .alert-info {
+            background-color: #e1f5fe;
+            color: #0277bd;
+            border-color: #b3e5fc;
+            margin-top: 1.5rem;
+        }
+        
+        .btn-primary {
+            background-color: var(--illini-orange);
+            border-color: var(--illini-orange);
+        }
+        
+        .btn-primary:hover {
+            background-color: #d83a1a;
+            border-color: #d83a1a;
+        }
+        
+        .btn-danger {
+            background-color: #dc3545;
+            border-color: #dc3545;
+        }
+        
+        .btn-danger:hover {
+            background-color: #c82333;
+            border-color: #bd2130;
+        }
+        
+        .no-history {
+            text-align: center;
+            padding: 3rem 2rem;
+        }
+        
+        .no-history h4 {
+            color: var(--illini-blue);
+            margin-bottom: 1rem;
+        }
+        
+        .action-buttons {
+            margin-top: 1.5rem;
+        }
+        
+        .delete-entry {
+            color: #dc3545;
+            border-color: #dc3545;
+        }
+        
+        .delete-entry:hover {
+            background-color: #dc3545;
+            color: white;
+        }
+        
+        .footer {
+            background-color: var(--illini-blue);
+            color: white;
+            padding: 1.5rem 0;
+            text-align: center;
+            margin-top: 3rem;
+        }
+        
+        .footer a {
+            color: var(--illini-orange);
+            text-decoration: none;
+        }
+        
+        .footer a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">UIUC <span>Grainger</span> Search</a>
+        </div>
+    </nav>
+
+    <div class="page-header">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-8">
+                    <h1>Search History</h1>
+                    <p class="text-muted">Your search history is stored locally in your browser</p>
+                </div>
+                <div class="col-md-4 text-end d-flex justify-content-end align-items-center">
+                    <a href="/" class="btn btn-primary">New Search</a>
+                    <button id="clearHistoryBtn" class="btn btn-danger ms-3">Clear All History</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="history-content">
+            <div id="historyTable" class="history-table">
+                <div class="d-flex justify-content-center p-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="container">
+            <p>Grainger College of Engineering Document Retrieval System</p>
+            <p><small>University of Illinois Urbana-Champaign</small></p>
+        </div>
+    </footer>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const historyTableElement = document.getElementById('historyTable');
+            
+            function loadSearchHistory() {
+                const history = JSON.parse(localStorage.getItem('searchHistory')) || [];
+                
+                if (history.length === 0) {
+                    historyTableElement.innerHTML = `
+                        <div class="no-history">
+                            <div class="alert alert-info">
+                                <h4>No search history found</h4>
+                                <p>Your search history will appear here once you start searching.</p>
+                            </div>
+                            <div class="action-buttons">
+                                <a href="/" class="btn btn-primary">Start Searching</a>
+                            </div>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                let tableHtml = `
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Query</th>
+                                <th>Search Type</th>
+                                <th>Date and Time</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+                
+                history.forEach((item, index) => {
+                    tableHtml += `
+                        <tr class="clickable-row" data-query="${item.query}" data-type="${item.type}">
+                            <td>${item.query}</td>
+                            <td><span class="badge bg-light text-dark">${item.type}</span></td>
+                            <td>${item.timestamp}</td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-danger delete-entry" data-index="${index}">
+                                    Delete
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+                
+                tableHtml += `
+                        </tbody>
+                    </table>
+                    <div class="alert alert-info m-3">
+                        Click on any row to repeat the search query
+                    </div>
+                `;
+                
+                historyTableElement.innerHTML = tableHtml;
+                
+                document.querySelectorAll('.clickable-row').forEach(row => {
+                    row.addEventListener('click', function(e) {
+                        if (e.target.classList.contains('delete-entry') || 
+                            e.target.closest('.delete-entry')) {
+                            return;
+                        }
+                        
+                        const query = this.getAttribute('data-query');
+                        const type = this.getAttribute('data-type');
+                        
+                        const form = document.createElement('form');
+                        form.method = 'post';
+                        form.action = '/search';
+                        
+                        const queryInput = document.createElement('input');
+                        queryInput.type = 'hidden';
+                        queryInput.name = 'q';
+                        queryInput.value = query;
+                        form.appendChild(queryInput);
+                        
+                        const typeInput = document.createElement('input');
+                        typeInput.type = 'hidden';
+                        typeInput.name = 'type';
+                        typeInput.value = type;
+                        form.appendChild(typeInput);
+                        
+                        document.body.appendChild(form);
+                        form.submit();
+                    });
+                });
+                
+                document.querySelectorAll('.delete-entry').forEach(button => {
+                    button.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        
+                        const index = parseInt(this.getAttribute('data-index'));
+                        deleteHistoryEntry(index);
+                    });
+                });
+            }
+            
+            function deleteHistoryEntry(index) {
+                let history = JSON.parse(localStorage.getItem('searchHistory')) || [];
+                
+                if (index >= 0 && index < history.length) {
+                    const entryToDelete = history[index];
+                    
+                    if (confirm(`Are you sure you want to delete the search "${entryToDelete.query}"?`)) {
+                        history.splice(index, 1);
+                        localStorage.setItem('searchHistory', JSON.stringify(history));
+                        loadSearchHistory();
+                    }
+                }
+            }
+            
+            document.getElementById('clearHistoryBtn').addEventListener('click', function() {
+                if (confirm('Are you sure you want to clear your entire search history?')) {
+                    localStorage.setItem('searchHistory', JSON.stringify([]));
+                    loadSearchHistory();
+                }
+            });
+            
+            loadSearchHistory();
+        });
+    </script>
+</body>
+</html>
