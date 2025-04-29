@@ -3,18 +3,19 @@ import os
 import time
 import random
 import base64
+import rmp_config
 
-OUTPUT_DIR = "./data/RMP_Htmls"
+OUTPUT_DIR = "./data/rmp_htmls"
 
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 " \
              "Safari/537.36"
 
+SID = rmp_config.SID
+
 def encode_school_id(sid):
-    """
-    将学校 ID 编码为 Base64 格式，例如 "1112" -> "U2Nob29sLTExMTI="
-    """
     school_str = f"School-{sid}"
     return base64.b64encode(school_str.encode()).decode()
+
 
 def crawl_and_save_professors(sid, output_dir=OUTPUT_DIR):
     """
@@ -159,7 +160,8 @@ def crawl_and_save_professors(sid, output_dir=OUTPUT_DIR):
 
     print(f"Finished! Total processed: {total_links} professor pages.")
 
+
 # 测试代码
 if __name__ == "__main__":
-    school_id = "1112"
+    school_id = SID
     crawl_and_save_professors(school_id)
