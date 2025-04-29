@@ -1,0 +1,20 @@
+{
+  "professor": {
+    "id": 327064,
+    "firstName": "Todd",
+    "lastName": "Kukla",
+    "fullName": "Todd Kukla",
+    "department": "Philosophy",
+    "ratings": {
+      "numRatings": 9,
+      "avgRating": 3.7,
+      "avgDifficulty": 2,
+      "wouldTakeAgainPercent": 100
+    },
+    "tags": [
+      "Get ready to read",
+      "Clear grading criteria",
+      "Lecture heavy"
+    ]
+  }
+}
