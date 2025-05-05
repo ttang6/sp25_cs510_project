@@ -1,4 +1,5 @@
 from flask import Flask, request, render_template, Response, jsonify, redirect, url_for
+from src.elasticsearch.search_content import search_webpages
 from elasticsearch import Elasticsearch
 from urllib.parse import unquote
 import json
@@ -198,6 +199,15 @@ def search():
         page=page,
         page_size=PAGE_SIZE,
     )
+
+
+@app.route("/api/search_content", methods=["GET"])
+def search_content():
+    query = request.args.get("q")
+    if not query:
+        return jsonify({"error": "Missing query parameter"}), 400
+    results = search_webpages(query)
+    return jsonify({"results": results})
 
 
 load_pagerank_scores()
