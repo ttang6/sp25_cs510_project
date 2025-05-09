@@ -135,3 +135,8 @@ python main.py
    - Verify indices are created
    - Check search keywords
    - Validate index data integrity
+
+## Known Bugs
+
+1. Pagination Error:
+   - When search results exceed 10,000 entries, the last page navigation will fail
