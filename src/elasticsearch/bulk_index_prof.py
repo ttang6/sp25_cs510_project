@@ -14,14 +14,14 @@ es = Elasticsearch(
     ssl_show_warn=False
 )
 
-base_folder = "data/raw/website"
+base_folder = "data/raw/rmp"
 
 # Get subfolders that match existing indices
 existing_indices = es.indices.get_alias().keys()
 subfolders = []
 for index in existing_indices:
-    if index.startswith("webpages_"):
-        folder_name = index.replace("webpages_", "")
+    if index.endswith("_professors"):
+        folder_name = index.replace("_professors", "")
         folder_path = os.path.join(base_folder, folder_name)
         if os.path.exists(folder_path):
             subfolders.append(folder_name)
@@ -33,7 +33,7 @@ if not subfolders:
 print(f"Found {len(subfolders)} folders to process")
 
 for subfolder in subfolders:
-    index_name = f"webpages_{subfolder}"
+    index_name = f"{subfolder}_professors"
     json_folder = os.path.join(base_folder, subfolder)
     json_files = [f for f in os.listdir(json_folder) if f.endswith('.json')]
     
@@ -46,18 +46,24 @@ for subfolder in subfolders:
         
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
-                pages = json.load(f)
+                data = json.load(f)
             
             actions = []
-            for page in pages:
+            for professor_item in data["professors"]:
+                prof = professor_item["professor"]
                 doc = {
                     "_index": index_name,
                     "_source": {
-                        "title": page.get("title", ""),
-                        "url": page.get("url", ""),
-                        "anchor_texts": page.get("anchor_texts", []),
-                        "content": page.get("content", ""),
-                        "outlinks": page.get("outlinks", [])
+                        "id": prof["id"],
+                        "firstName": prof["firstName"],
+                        "lastName": prof["lastName"],
+                        "fullName": prof["fullName"],
+                        "department": prof["department"],
+                        "numRatings": prof["ratings"]["numRatings"],
+                        "avgRating": prof["ratings"]["avgRating"],
+                        "avgDifficulty": prof["ratings"]["avgDifficulty"],
+                        "wouldTakeAgainPercent": prof["ratings"]["wouldTakeAgainPercent"],
+                        "tags": prof.get("tags", [])
                     }
                 }
                 actions.append(doc)
