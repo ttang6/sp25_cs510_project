@@ -32,8 +32,12 @@ A campus resource search platform based on Elasticsearch.
 │   └── postprocess/    # Data preprocessing
 ├── static/             # Static resources
 │   └── templates/      # HTML templates
+├── tests/              # Evalution code
+│   ├── benchmark/      # Basic test
+│   ├── locust/         # Stress test
+│   └── data/           # Data files
 ├── requirements.txt    # Project dependencies
-└── main.py            # Main application
+└── main.py             # Main application
 ```
 
 ## Installation
@@ -61,9 +65,9 @@ pip install -r requirements.txt
 ```
 
 4. Configure Elasticsearch:
-   - Create an `es_config` file in `/src/config` with your Elasticsearch API key:
+   - Create an `es_config` file in `/src/config` with your Elasticsearch key:
      ```
-     KEY = your_elasticsearch_api_key
+     KEY = your_elasticsearch_key
      ```
    - Ensure Elasticsearch service is running
    - Default configuration: `https://localhost:9200`
@@ -78,7 +82,7 @@ python main.py
 2. Access the application:
    - Open browser and visit `http://127.0.0.1:5000`
    - Enter keywords in the search box
-   - Choose search type (standard or index search)
+   - Choose search type
 
 3. Search features:
    - Standard search: search across all indices
