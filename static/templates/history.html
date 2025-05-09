@@ -246,7 +246,10 @@
                 
                 history.forEach((item, index) => {
                     tableHtml += `
-                        <tr class="clickable-row" data-query="${item.query}" data-type="${item.type}">
+                        <tr class="clickable-row" 
+                            data-query="${item.query}" 
+                            data-type="${item.type}"
+                            data-indices='${JSON.stringify(item.selectedIndices || [])}'>
                             <td>${item.query}</td>
                             <td><span class="badge bg-light text-dark">${item.type}</span></td>
                             <td>${item.timestamp}</td>
@@ -278,6 +281,7 @@
                         
                         const query = this.getAttribute('data-query');
                         const type = this.getAttribute('data-type');
+                        const indices = JSON.parse(this.getAttribute('data-indices') || '[]');
                         
                         const form = document.createElement('form');
                         form.method = 'post';
@@ -294,6 +298,16 @@
                         typeInput.name = 'type';
                         typeInput.value = type;
                         form.appendChild(typeInput);
+                        
+                        if (type === 'index' && indices.length > 0) {
+                            indices.forEach(index => {
+                                const indexInput = document.createElement('input');
+                                indexInput.type = 'hidden';
+                                indexInput.name = 'selected_indices';
+                                indexInput.value = index;
+                                form.appendChild(indexInput);
+                            });
+                        }
                         
                         document.body.appendChild(form);
                         form.submit();

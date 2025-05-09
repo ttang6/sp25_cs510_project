@@ -59,6 +59,7 @@
         
         .search-box {
             margin-bottom: 1.5rem;
+            position: relative;
         }
         
         .search-box .form-control {
@@ -130,19 +131,29 @@
         
         .autocomplete-items {
             position: absolute;
+            top: 100%;
+            left: 0;
+            right: 120px;  /* 搜索按钮的宽度 */
             border: 1px solid #ddd;
             border-top: none;
             z-index: 99;
-            width: 100%;
             background-color: white;
             border-radius: 0 0 8px 8px;
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            display: none;  /* 默认隐藏 */
+        }
+        
+        .autocomplete-items:not(:empty) {
+            display: block;  /* 有内容时显示 */
         }
         
         .autocomplete-items div {
             padding: 12px 15px;
             cursor: pointer;
             border-bottom: 1px solid #f5f5f5;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         
         .autocomplete-items div:hover {
@@ -201,11 +212,11 @@
             {% endif %}
 
             <form action="/search" method="post" class="search-box" id="searchForm">
-                <div class="input-group mb-3">
+                <div class="input-group mb-3 position-relative">
                     <input type="text" class="form-control" id="searchInput" name="q" placeholder="Enter your search query..." autocomplete="off">
                     <button class="btn btn-primary" type="submit">Search</button>
+                    <div id="autocompleteList" class="autocomplete-items"></div>
                 </div>
-                <div id="autocompleteList" class="autocomplete-items"></div>
                 
                 <div class="search-options">
                     <div class="row">
@@ -217,20 +228,30 @@
                         </div>
                         <div class="col-md-3 col-6">
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="type" id="phraseSearch" value="phrase">
-                                <label class="form-check-label" for="phraseSearch">Phrase Search</label>
-                            </div>
-                        </div>
-                        <div class="col-md-3 col-6">
-                            <div class="form-check">
                                 <input class="form-check-input" type="radio" name="type" id="wildcardSearch" value="wildcard">
                                 <label class="form-check-label" for="wildcardSearch">Wildcard Search</label>
                             </div>
                         </div>
                         <div class="col-md-3 col-6">
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="type" id="documentSearch" value="document">
-                                <label class="form-check-label" for="documentSearch">Document Search</label>
+                                <input class="form-check-input" type="radio" name="type" id="indexSearch" value="index">
+                                <label class="form-check-label" for="indexSearch">Index Search</label>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="type" id="professorSearch" value="professor">
+                                <label class="form-check-label" for="professorSearch">Professor Rating</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row mt-3" id="indexSelection" style="display: none;">
+                        <div class="col-12">
+                            <div class="d-flex flex-wrap gap-2" id="indexList">
+                                <!-- Index list will be loaded dynamically via JavaScript -->
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -270,7 +291,123 @@
                 localStorage.setItem('searchHistory', JSON.stringify([]));
             }
             
+            // 恢复上次的搜索状态
+            const lastSearchType = localStorage.getItem('lastSearchType');
+            const lastSelectedIndices = JSON.parse(localStorage.getItem('lastSelectedIndices') || '[]');
+            
+            if (lastSearchType === 'index' && lastSelectedIndices.length > 0) {
+                document.querySelector('input[name="type"][value="index"]').checked = true;
+                document.getElementById('indexSelection').style.display = 'block';
+                lastSelectedIndices.forEach(index => {
+                    const checkbox = document.querySelector(`input[name="selected_indices"][value="${index}"]`);
+                    if (checkbox) checkbox.checked = true;
+                });
+            }
+            
             displayRecentSearches();
+            loadIndices(); // 加载索引列表
+            
+            const indexSearchRadio = document.getElementById('indexSearch');
+            const indexSelection = document.getElementById('indexSelection');
+            
+            document.querySelectorAll('input[name="type"]').forEach(radio => {
+                radio.addEventListener('change', function() {
+                    if (this.value === 'index') {
+                        indexSelection.style.display = 'block';
+                        document.getElementById('searchInput').placeholder = "Enter your search query...";
+                        document.getElementById('searchInput').setAttribute('autocomplete', 'off');
+                    } else if (this.value === 'professor') {
+                        indexSelection.style.display = 'none';
+                        document.getElementById('searchInput').placeholder = "Enter professor's name...";
+                        document.getElementById('searchInput').setAttribute('autocomplete', 'off');
+                        // 清空并隐藏自动完成列表
+                        document.getElementById('autocompleteList').innerHTML = '';
+                        document.getElementById('autocompleteList').style.display = 'none';
+                    } else {
+                        indexSelection.style.display = 'none';
+                        document.getElementById('searchInput').placeholder = "Enter your search query...";
+                        document.getElementById('searchInput').setAttribute('autocomplete', 'off');
+                    }
+                });
+            });
+            
+            // 修改导航栏搜索按钮的处理
+            document.querySelector('.navbar-brand').addEventListener('click', function(e) {
+                e.preventDefault();
+                // 获取当前选中的搜索类型和索引
+                const selectedType = document.querySelector('input[name="type"]:checked').value;
+                const selectedIndices = Array.from(document.querySelectorAll('input[name="selected_indices"]:checked'))
+                    .map(input => input.value);
+                
+                // 保存当前状态到 localStorage
+                if (selectedType === 'index' && selectedIndices.length > 0) {
+                    localStorage.setItem('lastSearchType', selectedType);
+                    localStorage.setItem('lastSelectedIndices', JSON.stringify(selectedIndices));
+                }
+                
+                window.location.href = '/';
+            });
+            
+            // 加载索引列表的函数
+            function loadIndices() {
+                fetch('/api/indices')
+                    .then(response => response.json())
+                    .then(indices => {
+                        const indexList = document.getElementById('indexList');
+                        indexList.innerHTML = ''; // 清空加载动画
+                        
+                        if (Object.keys(indices).length === 0) {
+                            indexList.innerHTML = '<p class="text-muted">No indices available</p>';
+                            return;
+                        }
+                        
+                        // 获取后端定义的顺序
+                        const orderedIndices = [
+                            "webpages_uiuc",
+                            "webpages_uiuc_grainger",
+                            "webpages_uiuc_cs",
+                            "webpages_uiuc_ece"
+                        ];
+                        
+                        // 按照定义的顺序创建索引选项
+                        orderedIndices.forEach(indexKey => {
+                            if (indices[indexKey]) {  // 只显示存在的索引
+                                const div = document.createElement('div');
+                                div.className = 'form-check';
+                                div.innerHTML = `
+                                    <input class="form-check-input" type="checkbox" 
+                                           name="selected_indices" value="${indexKey}" 
+                                           id="index_${indexKey}">
+                                    <label class="form-check-label" for="index_${indexKey}">
+                                        ${indices[indexKey]}
+                                    </label>
+                                `;
+                                indexList.appendChild(div);
+                            }
+                        });
+
+                        // 在索引列表加载完成后恢复状态
+                        const lastSearchType = localStorage.getItem('lastSearchType');
+                        const lastSelectedIndices = JSON.parse(localStorage.getItem('lastSelectedIndices') || '[]');
+                        
+                        if (lastSearchType === 'index' && lastSelectedIndices.length > 0) {
+                            document.querySelector('input[name="type"][value="index"]').checked = true;
+                            document.getElementById('indexSelection').style.display = 'block';
+                            lastSelectedIndices.forEach(index => {
+                                const checkbox = document.querySelector(`input[name="selected_indices"][value="${index}"]`);
+                                if (checkbox) checkbox.checked = true;
+                            });
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error loading indices:', error);
+                        const indexList = document.getElementById('indexList');
+                        indexList.innerHTML = '<p class="text-danger">Error loading indices</p>';
+                    });
+            }
+            
+            // 定期刷新索引列表（每5分钟）
+            setInterval(loadIndices, 5 * 60 * 1000);
             
             document.getElementById('searchForm').addEventListener('submit', function(event) {
                 const query = document.getElementById('searchInput').value.trim();
@@ -282,6 +419,15 @@
                         if (input.checked) {
                             selectedType = input.value;
                             break;
+                        }
+                    }
+                    
+                    if (selectedType === 'index') {
+                        const selectedIndices = document.querySelectorAll('input[name="selected_indices"]:checked');
+                        if (selectedIndices.length === 0) {
+                            event.preventDefault();
+                            alert('请至少选择一个索引');
+                            return;
                         }
                     }
                     
@@ -302,6 +448,14 @@
 
             searchInput.addEventListener("input", function(e) {
                 const val = this.value;
+                const selectedType = document.querySelector('input[name="type"]:checked').value;
+                
+                // 如果是教授搜索，不显示自动完成
+                if (selectedType === 'professor') {
+                    closeAllLists();
+                    return false;
+                }
+                
                 closeAllLists();
                 if (!val) { return false; }
 
@@ -312,9 +466,10 @@
                             autocompleteList.innerHTML = '';
                             data.forEach(item => {
                                 const div = document.createElement("DIV");
+                                div.title = item;
                                 div.innerHTML = item;
                                 div.addEventListener("click", function(e) {
-                                    searchInput.value = this.innerHTML;
+                                    searchInput.value = this.title;
                                     closeAllLists();
                                 });
                                 autocompleteList.appendChild(div);
@@ -370,10 +525,18 @@
                 const now = new Date();
                 const timestamp = now.toLocaleString();
                 
+                // 如果是 index search，保存选中的索引
+                let selectedIndices = [];
+                if (type === 'index') {
+                    selectedIndices = Array.from(document.querySelectorAll('input[name="selected_indices"]:checked'))
+                        .map(input => input.value);
+                }
+                
                 const entry = {
                     query: query,
                     type: type,
-                    timestamp: timestamp
+                    timestamp: timestamp,
+                    selectedIndices: selectedIndices
                 };
                 
                 history = history.filter(item => !(item.query === query && item.type === type));
@@ -400,7 +563,9 @@
                     html = '<div class="list-group">';
                     recentHistory.forEach(item => {
                         html += `<div class="history-item list-group-item list-group-item-action" 
-                                data-query="${item.query}" data-type="${item.type}">
+                                data-query="${item.query}" 
+                                data-type="${item.type}"
+                                data-indices='${JSON.stringify(item.selectedIndices || [])}'>
                                 <div class="d-flex w-100 justify-content-between">
                                 <h5 class="mb-1">${item.query}</h5>
                                 <small>${item.timestamp}</small>
@@ -417,9 +582,25 @@
                     item.addEventListener('click', function() {
                         const query = this.getAttribute('data-query');
                         const type = this.getAttribute('data-type');
+                        const indices = JSON.parse(this.getAttribute('data-indices') || '[]');
                         
                         document.getElementById('searchInput').value = query;
                         document.querySelector(`input[name="type"][value="${type}"]`).checked = true;
+                        
+                        // 如果是 index search，选中保存的索引
+                        if (type === 'index') {
+                            document.getElementById('indexSelection').style.display = 'block';
+                            // 先取消所有选中
+                            document.querySelectorAll('input[name="selected_indices"]').forEach(input => {
+                                input.checked = false;
+                            });
+                            // 选中保存的索引
+                            indices.forEach(index => {
+                                const checkbox = document.querySelector(`input[name="selected_indices"][value="${index}"]`);
+                                if (checkbox) checkbox.checked = true;
+                            });
+                        }
+                        
                         document.querySelector('form.search-box').submit();
                     });
                 });

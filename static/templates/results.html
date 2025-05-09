@@ -234,6 +234,11 @@
                     <form action="/search" method="post" class="search-form" id="searchForm">
                         <input type="text" class="form-control" name="q" id="searchInput" value="{{ query }}" placeholder="Search...">
                         <input type="hidden" name="type" id="searchType" value="{{ query_type }}">
+                        {% if query_type == 'index' and selected_indices %}
+                            {% for index in selected_indices %}
+                                <input type="hidden" name="selected_indices" value="{{ index }}">
+                            {% endfor %}
+                        {% endif %}
                         <button class="btn btn-primary" type="submit">Search</button>
                     </form>
                 </div>
@@ -254,6 +259,18 @@
                 </div>
             </div>
             
+            <div class="search-info mb-4">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div class="search-stats">
+                        <p>Find {{ total_results }} results (Search time: {{ search_time|round(2) }} s)</p>
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="showDetailedScores">
+                        <label class="form-check-label" for="showDetailedScores">Show detailed</label>
+                    </div>
+                </div>
+            </div>
+            
             <div class="search-results">
                 {% if results %}
                     {% for result in results %}
@@ -269,9 +286,17 @@
                         </div>
                         <div class="result-snippet">{{ result.snippet }}</div>
                         <div class="score-info">
-                            Score: <span class="score-value">{{ "%.2f"|format(result.final_score) }}</span> 
-                            (Relevance: {{ "%.2f"|format(result.score) }}, 
-                            PageRank: {{ "%.4f"|format(result.pagerank) }})
+                            <div class="final-score">
+                                Score: <span class="score-value">{{ "%.4f"|format(result.final_score) }}</span>
+                            </div>
+                            <div class="detailed-scores" style="display: none;">
+                                <div class="mt-1">
+                                    Relevance Score: <span class="score-value">{{ "%.4f"|format(result.relevance_score) }}</span>
+                                </div>
+                                <div class="mt-1">
+                                    PageRank Score: <span class="score-value">{{ "%.5f"|format(result.pagerank) }}</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     {% endfor %}
@@ -339,10 +364,19 @@
                     const now = new Date();
                     const timestamp = now.toLocaleString();
                     
+                    let selectedIndices = [];
+                    if (type === 'index') {
+                        selectedIndices = Array.from(document.querySelectorAll('input[name="selected_indices"]'))
+                            .map(input => input.value);
+                        localStorage.setItem('lastSearchType', type);
+                        localStorage.setItem('lastSelectedIndices', JSON.stringify(selectedIndices));
+                    }
+                    
                     const entry = {
                         query: query,
                         type: type,
-                        timestamp: timestamp
+                        timestamp: timestamp,
+                        selectedIndices: selectedIndices
                     };
                     
                     history = history.filter(item => !(item.query === query && item.type === type));
@@ -355,7 +389,28 @@
                     localStorage.setItem('searchHistory', JSON.stringify(history));
                 }
             });
+
+            const showDetailedScores = document.getElementById('showDetailedScores');
+            const detailedScores = document.querySelectorAll('.detailed-scores');
+            
+            const showScores = localStorage.getItem('showDetailedScores') === 'true';
+            showDetailedScores.checked = showScores;
+            
+            function updateDisplay() {
+                const isDetailed = showDetailedScores.checked;
+                detailedScores.forEach(score => {
+                    score.style.display = isDetailed ? 'block' : 'none';
+                });
+                
+                localStorage.setItem('showDetailedScores', isDetailed);
+            }
+            
+            updateDisplay();
+            
+            showDetailedScores.addEventListener('change', updateDisplay);
         });
+
+        const searchResults = JSON.parse('{{ results|tojson|safe }}');
     </script>
 </body>
 </html>
