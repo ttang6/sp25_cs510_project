@@ -1,17 +1,19 @@
-import asyncio
-import aiohttp
+import requests
 from bs4 import BeautifulSoup
 import json
 import os
+import sys
 import re
 from urllib.parse import urljoin, urlparse
 from datetime import datetime
 
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import config.web_config as web_config
+
 # Configuration
-SAVE_PATH = '../data/rawJSON'
-START_URL = 'https://grainger.illinois.edu/'
-MAX_PAGES = 500
-MAX_C = 10  # Maximum concurrent requests
+SAVE_PATH = '../data/rawJSON/web'
+START_URL = web_config.URL
+MAX_PAGES_PER_ROUND = 500
 
 # Create save directory
 os.makedirs(SAVE_PATH, exist_ok=True)
@@ -22,8 +24,8 @@ def sanitize_domain(domain):
     return re.sub(r'[^\w]', '_', domain).strip('_')
 
 
-# Check robots.txt restrictions (async)
-async def is_allowed(url, session, disallow_cache=None):
+# Check robots.txt restrictions
+def is_allowed(url, disallow_cache=None):
     if disallow_cache is None:
         disallow_cache = {}
 
@@ -34,17 +36,17 @@ async def is_allowed(url, session, disallow_cache=None):
     else:
         robots_url = f"{parsed.scheme}://{netloc}/robots.txt"
         try:
-            async with session.get(robots_url, timeout=5) as response:
-                if response.status == 200:
-                    text = await response.text()
-                    disallow = []
-                    for line in text.split('\n'):
-                        if line.strip().lower().startswith('disallow'):
-                            _, rule = line.split(':', 1)
-                            disallow.append(rule.strip())
-                    disallow_cache[netloc] = disallow
-                else:
-                    disallow_cache[netloc] = []
+            response = requests.get(robots_url, timeout=5)
+            if response.status_code == 200:
+                text = response.text
+                disallow = []
+                for line in text.split('\n'):
+                    if line.strip().lower().startswith('disallow'):
+                        _, rule = line.split(':', 1)
+                        disallow.append(rule.strip())
+                disallow_cache[netloc] = disallow
+            else:
+                disallow_cache[netloc] = []
         except:
             disallow_cache[netloc] = []
 
@@ -93,75 +95,76 @@ def extract_page_info(url, soup, outlinks, raw_html):
     }
 
 
-# Crawl a single page (async)
-async def crawl_page(url, session, visited, data_buffer, queue, domain, semaphore, disallow_cache):
-    async with semaphore:
-        if url in visited or not await is_allowed(url, session, disallow_cache):
+# Crawl a single page
+def crawl_page(url, visited, data_buffer, queue, domain, disallow_cache):
+    if url in visited or not is_allowed(url, disallow_cache):
+        return
+
+    try:
+        response = requests.get(url, timeout=5)
+        if response.status_code != 200:
+            print(f"Failed to access {url}: Status code {response.status_code}")
             return
 
-        try:
-            async with session.get(url, timeout=5) as response:
-                if response.status != 200:
-                    print(f"Failed to access {url}: Status code {response.status}")
-                    return
+        html = response.text
+        soup = BeautifulSoup(html, 'html.parser')
+        outlinks = extract_links(soup, url, domain)
+        page_info = extract_page_info(url, soup, outlinks, html)
+        data_buffer.append(page_info)
+        print(f"Crawled page {len(data_buffer)}: {url}")
 
-                html = await response.text()
-                soup = BeautifulSoup(html, 'html.parser')
-                outlinks = extract_links(soup, url, domain)
-                page_info = extract_page_info(url, soup, outlinks, html)
-                data_buffer.append(page_info)
-                print(f"Crawled page {len(data_buffer)}: {url}")
+        # Add new links to queue
+        for link in outlinks:
+            if link not in visited and link not in queue:
+                queue.append(link)
+        visited.add(url)
 
-                # Add new links to queue
-                for link in outlinks:
-                    if link not in visited:
-                        await queue.put(link)
-                visited.add(url)
+    except Exception as e:
+        print(f"Error processing {url}: {e}")
 
-        except Exception as e:
-            print(f"Error processing {url}: {e}")
+
+# Save data to JSON file
+def save_data(data_buffer, domain, timestamp):
+    if data_buffer:
+        file_path = os.path.join(SAVE_PATH, f'{domain}_{timestamp}_{len(data_buffer)}.json')
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(data_buffer, f, ensure_ascii=False, indent=4)
+        print(f"Saved {len(data_buffer)} pages to {file_path}")
 
 
 # Main crawling function
-async def main():
+def main():
     domain = urlparse(START_URL).netloc
     sanitized_domain = sanitize_domain(domain)
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')  # e.g., 20250418_123456
 
-    async with aiohttp.ClientSession() as session:
-        if not await is_allowed(START_URL, session):
-            print(f"Start URL {START_URL} is blocked by robots.txt")
-            return
+    if not is_allowed(START_URL):
+        print(f"Start URL {START_URL} is blocked by robots.txt")
+        return
 
-        queue = asyncio.Queue()
-        await queue.put(START_URL)
-        visited = set()
-        data_buffer = []
-        semaphore = asyncio.Semaphore(MAX_C)
-        disallow_cache = {}
+    queue = [START_URL]
+    visited = set()
+    data_buffer = []
+    disallow_cache = {}
+    round_count = 1
 
-        print(f"Starting crawl with up to {MAX_C} concurrent requests")
-        while not queue.empty() and len(data_buffer) < MAX_PAGES:
-            # Collect tasks for concurrent execution
-            tasks = []
-            for _ in range(min(queue.qsize(), MAX_C)):
-                if not queue.empty():
-                    url = await queue.get()
-                    tasks.append(
-                        crawl_page(url, session, visited, data_buffer, queue, domain, semaphore, disallow_cache))
+    print("Starting crawl")
+    while queue:
+        url = queue.pop(0)  # Get the next URL from the queue (FIFO)
+        crawl_page(url, visited, data_buffer, queue, domain, disallow_cache)
 
-            if tasks:
-                await asyncio.gather(*tasks)
+        if len(data_buffer) >= MAX_PAGES_PER_ROUND:
+            print(f"Round {round_count} completed with {len(data_buffer)} pages")
+            save_data(data_buffer, sanitized_domain, f"{timestamp}_round{round_count}")
+            data_buffer = []
+            round_count += 1
 
-        # Save all data to a single JSON file
-        if data_buffer:
-            file_path = os.path.join(SAVE_PATH, f'{sanitized_domain}_{timestamp}.json')
-            with open(file_path, 'w', encoding='utf-8') as f:
-                json.dump(data_buffer, f, ensure_ascii=False, indent=4)
-            print(f"Saved {len(data_buffer)} pages to {file_path}")
+    if data_buffer:
+        print(f"Final round completed with {len(data_buffer)} pages")
+        save_data(data_buffer, sanitized_domain, f"{timestamp}_final")
 
-        print("Crawling completed.")
+    print("Crawling completed. All subdomains have been crawled.")
 
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    main()
