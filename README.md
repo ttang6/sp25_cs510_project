@@ -37,6 +37,7 @@ A campus resource search platform based on Elasticsearch.
 │   ├── locust/         # Stress test
 │   └── data/           # Data files
 ├── requirements.txt    # Project dependencies
+├── build.py            # Quick initialization tool
 └── main.py             # Main application
 ```
 
@@ -75,9 +76,15 @@ pip install -r requirements.txt
 ## Usage
 
 1. Run the service:
+If you're using my data, you can run
+```bash
+python build.py
+```
+to automatically initialize Elasticsearch indices and import data, then run
 ```bash
 python main.py
 ```
+to start the service
 
 2. Access the application:
    - Open browser and visit `http://127.0.0.1:5000`
